@@ -49,8 +49,9 @@ sub nntp_200 {
 sub nntp_211 {
   # nntp_211:  '32507 1 32507 perl.perl5.changes'
   my ($kernel,$heap,$text) = @_[KERNEL,HEAP,ARG0];
-  my $lastid = ( split ' ', $text )[0];
-  $kernel->post( 'NNTP-Client' => article => $lastid );
+  $heap->{lastid} = ( split ' ', $text )[0];
+  $heap->{firstid} = $heap->{lastid} - 10;
+  $kernel->post( 'NNTP-Client' => article => $heap->{firstid} );
   return;
 }
 
@@ -84,6 +85,10 @@ sub nntp_220 {
       $msg .= " $author: $commitmsg; $url";
   }
   say $msg;
+  say '###################';
+  return if ++$heap->{firstid} > $heap->{lastid};
+  $kernel->post( 'NNTP-Client' => article => $heap->{firstid} );
+  return;
 }
 
 # We registered for all events, this will produce some debug info.

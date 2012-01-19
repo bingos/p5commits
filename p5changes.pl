@@ -1,3 +1,4 @@
+use 5.012;
 use strict;
 use warnings;
 use Email::Simple;
@@ -54,8 +55,8 @@ sub irc_join {
 }
 
 sub _article {
-  my ($kernel,$id,$lines) = @_[KERNEL,ARG0,ARG1];
-  my $post = Email::Simple->new( join("\n", @$lines) );
+  my ($kernel,$id,$article) = @_[KERNEL,ARG0,ARG1];
+  my $post = Email::Simple->new( join("\n", @$article) );
   return unless $post->header('Subject') =~ /^\Q[perl.git]/i;
   (my $subject = $post->header( 'Subject' )) =~ s/\015?\012//g;
   my ($git_describe) = $subject =~ m!(v5.+)$!;
@@ -82,7 +83,7 @@ sub _article {
       my $url = BASEURL2 . $sha1;
       $msg .= " $author: $commitmsg; $url";
   }
-  print $msg;
+  say $msg;
   return;
 }
 
