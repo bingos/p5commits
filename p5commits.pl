@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use Email::Simple;
 use POE::Kernel { loop => 'POE::XS::Loop::Poll' };
+use if $^O eq 'linux', 'POE::Kernel'=> { loop => 'POE::XS::Loop::EPoll' };
+use unless $^O eq 'linux', 'POE::Kernel' => { loop => 'POE::XS::Loop::Poll' };
 use POE qw(Component::IRC);
 use POE::Component::IRC::Common qw( :ALL );
 use POE::Component::IRC::Plugin::Connector;
