@@ -63,7 +63,7 @@ sub nntp_220 {
   my ($git_describe) = $subject =~ m!(v5.+)$!;
 
   my $body = $post->body;
-  my ($branch) = $body =~ m|In perl.git, the branch ([^ ]+) has been |;
+  my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been (.+?)\s|;
   $branch ||= 'nobranch';
 
   (my $porter = $post->header( 'From' )) =~ s/\015?\012//g;
@@ -71,6 +71,51 @@ sub nntp_220 {
   my ($pname) = $porter =~ /\("(.+)"\)/;
 
   my $msg = "$pname pushed to $branch ($git_describe):";
+  unless ( $action eq 'deleted' ) {
+    my $log = 0;
+    my $state = {};
+    my $ignore = 0;
+    foreach my $line ( @{ $article } ) {
+      if ( $log ) {
+        if ( $line =~ /^----------------/ ) {
+          if ( $state->{msg} ) {
+            $msg .= _build_msg( $state );
+            $state = { };
+          }
+          last;
+        }
+        if ( $line =~ /commit\s+([0-9a-f]{8})/ ) {
+          if ( $state->{msg} ) {
+            $msg .= _build_msg( $state );
+            $state = { };
+          }
+          $state->{sha1} = $1;
+          next;
+        }
+        if ( $line =~ /Author:\s+(.+) <.+>/ ) {
+          $state->{author} = $1;
+          next;
+        }
+        if ( $line =~ /Date:\s+/ ) {
+          $state->{date} = 'yes';
+          next;
+        }
+        next if $line =~ /^\s*$/;
+        next if $state->{msg};
+        if ( $state->{date} and $line =~ /^\s*(.+)$/ ) {
+          $state->{msg} = $1 || 'no commit message found.';
+          next;
+        }
+      }
+      $log = 1 if $line =~ /^- Log -/;
+    }
+  }
+  else {
+    $msg .= ' deleted';
+  }
+
+=for comment
+
   while ( $body =~ /\015?\012commit\s+([0-9a-f]{8})/g ) {
       my $sha1 = $1;
 
@@ -84,11 +129,19 @@ sub nntp_220 {
       my $url = BASEURL2 . $sha1;
       $msg .= " $author: $commitmsg; $url";
   }
+
+=cut
+
   say $msg;
   say '###################';
   return if ++$heap->{firstid} > $heap->{lastid};
   $kernel->post( 'NNTP-Client' => article => $heap->{firstid} );
   return;
+}
+
+sub _build_msg {
+  my $state = shift;
+  return ' ' . $state->{author} . ': ' . $state->{msg} . '; ' . BASEURL2 . $state->{sha1};
 }
 
 # We registered for all events, this will produce some debug info.

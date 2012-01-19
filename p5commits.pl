@@ -13,12 +13,16 @@ use constant NNTPGROUP  => 'perl.perl5.changes';
 use constant BASEURL    => 'http://www.nntp.perl.org/group/perl.perl5.changes';
 use constant BASEURL2   => 'http://perl5.git.perl.org/perl.git/commit/';
 
+use constant NICKNAME   => 'p5commits';
+use constant IRCSERVER  => 'irc.perl.org';
+use constant IRCPORT    => '6667';
+use constant IRCUSER    => 'p5p';
+use constant IRCNAME    => 'p5commits bot <see BinGOs>';
+use constant CHANNEL    => '#p5p';
+
 $|=1;
 
-my $nickname = 'GumbyPAN';
-my $username = 'cpanbot';
-
-#my $irc = POE::Component::IRC->spawn( debug => 0 );
+my $irc = POE::Component::IRC->spawn( debug => 0 );
 
 POE::Component::Client::NNTP::Tail->spawn(
    NNTPServer  => NNTPSERVER,
@@ -27,7 +31,7 @@ POE::Component::Client::NNTP::Tail->spawn(
 
 POE::Session->create(
     package_states => [
-	    'main' => [ qw(_start irc_001 irc_join _default _article) ],
+	    'main' => [ qw(_start irc_001 irc_join _default _header _article) ],
     ],
     options => { trace => 0 },
 );
@@ -37,20 +41,34 @@ exit 0;
 
 sub _start {
   my ($kernel, $heap, $session) = @_[KERNEL, HEAP, SESSION];
-  $kernel->post( NNTPGROUP, 'register', '_article' );
-  #$irc->yield( register => 'all' );
-  #$irc->plugin_add( 'Connector', POE::Component::IRC::Plugin::Connector->new() );
-  #$irc->yield( connect => { Nick => $nickname, Server => $server, Port => $port, Username => $username, Password => $password } );
+  $kernel->post( NNTPGROUP, 'register', '_header' );
+  $irc->yield( register => 'all' );
+  $irc->plugin_add( 'Connector', POE::Component::IRC::Plugin::Connector->new() );
+  $irc->yield( connect => {
+    Nick     => NICKNAME,
+    Server   => IRCSERVER,
+    Port     => IRCPORT,
+    Username => IRCUSER,
+    Ircname  => IRCNAME,
+  } );
   return;
 }
 
 sub irc_001 {
-  #$irc->yield( 'join', $_ ) for keys %channels;
+  $irc->yield( 'join', CHANNEL );
   return;
 }
 
 sub irc_join {
   my ($nickhost,$channel) = @_[ARG0,ARG1];
+  return;
+}
+
+sub _header {
+  my ($kernel,$id,$article) = @_[KERNEL,ARG0,ARG1];
+  my $post = Email::Simple->new( join("\n", @$article) );
+  return unless $post->header('Subject') =~ /^\Q[perl.git]/i;
+  $kernel->post( $_[SENDER], 'get_article', $id, '_article' );
   return;
 }
 
@@ -62,7 +80,7 @@ sub _article {
   my ($git_describe) = $subject =~ m!(v5.+)$!;
 
   my $body = $post->body;
-  my ($branch) = $body =~ m|In perl.git, the branch ([^ ]+) has been |;
+  my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been ([^ ]+)|;
   $branch ||= 'nobranch';
 
   (my $porter = $post->header( 'From' )) =~ s/\015?\012//g;
@@ -70,6 +88,12 @@ sub _article {
   my ($pname) = $porter =~ /\("(.+)"\)/;
 
   my $msg = "$pname pushed to $branch ($git_describe):";
+  if ( $action eq 'deleted' ) {
+    $msg .= " $action";
+    say $msg;
+    $irc->yield( 'ctcp', CHANNEL, "ACTION $msg" );
+    return;
+  }
   while ( $body =~ /\015?\012commit\s+([0-9a-f]{8})/g ) {
       my $sha1 = $1;
 
@@ -84,6 +108,7 @@ sub _article {
       $msg .= " $author: $commitmsg; $url";
   }
   say $msg;
+  $irc->yield( 'ctcp', CHANNEL, "ACTION $msg" );
   return;
 }
 
