@@ -19,12 +19,12 @@ use constant BASEURL    => 'http://www.nntp.perl.org/group/perl.perl5.changes';
 use constant BASEURL2   => 'http://perl5.git.perl.org/perl.git/commit/';
 use constant RTBROWSE   => 'http://rt.perl.org/rt3/Public/Bug/Display.html?id=';
 
-use constant NICKNAME   => 'p5commits2';
-use constant IRCSERVER  => 'irc.perl.org';
+use constant NICKNAME   => 'p5commits';
+use constant IRCSERVER  => '217.168.150.167';
 use constant IRCPORT    => '6667';
 use constant IRCUSER    => 'p5p';
 use constant IRCNAME    => 'p5commits bot <see BinGOs>';
-use constant CHANNEL    => '#IRC.pm';
+use constant CHANNEL    => '#p5p';
 
 my $current_id = 0;
 my %active_ids;
