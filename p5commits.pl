@@ -9,11 +9,15 @@ use POE qw(Component::IRC);
 use POE::Component::IRC::Common qw( :ALL );
 use POE::Component::IRC::Plugin::Connector;
 use POE::Component::Client::NNTP::Tail;
+use POE::Component::Client::HTTP;
+use IRC::Utils qw[uc_irc decode_irc parse_user];
+use HTTP::Request::Common qw[GET];
 
 use constant NNTPSERVER => 'nntp.perl.org';
 use constant NNTPGROUP  => 'perl.perl5.changes';
 use constant BASEURL    => 'http://www.nntp.perl.org/group/perl.perl5.changes';
 use constant BASEURL2   => 'http://perl5.git.perl.org/perl.git/commit/';
+use constant RTBROWSE   => 'http://rt.perl.org/rt3/Public/Bug/Display.html?id=';
 
 use constant NICKNAME   => 'p5commits';
 use constant IRCSERVER  => 'irc.perl.org';
@@ -22,7 +26,40 @@ use constant IRCUSER    => 'p5p';
 use constant IRCNAME    => 'p5commits bot <see BinGOs>';
 use constant CHANNEL    => '#p5p';
 
+my $current_id = 0;
+my %active_ids;
+
+sub allocate_id {
+  while (1) {
+    last unless exists $active_ids{ ++$current_id };
+  }
+  return $active_ids{$current_id} = $current_id;
+}
+
+sub free_id {
+  my $id = shift;
+  delete $active_ids{$id};
+}
+
+my $answer_re = qr/
+        (?: \b(perl|bug|rt) \s+ \# (\d+)\b )
+        |
+        (?: \b(change|commit) \s+
+            \#? ([0-9a-fA-F]+)\b (?!\s+ \w+ \s+ (?:into|to|in)) )
+        |
+        (?: (\#) ([0-9a-fA-F]+)\b )
+    /xi;
+
+my $ignores = join '|', map { quotemeta( uc_irc( $_ ) ) } qw( purl NL-PM dipsy clunker3 );
+my $ignore_re = qr/^($ignores)$/;
+
 $|=1;
+
+POE::Component::Client::HTTP->spawn(
+  Agent => 'p5commits/1.00',
+  Alias => 'ua',
+  FollowRedirects => 5,
+);
 
 my $irc = POE::Component::IRC->spawn( debug => 0 );
 
@@ -33,7 +70,7 @@ POE::Component::Client::NNTP::Tail->spawn(
 
 POE::Session->create(
     package_states => [
-	    'main' => [ qw(_start irc_001 irc_join _default _header _article) ],
+	    'main' => [ qw(_start irc_001 irc_join irc_public _default _header _article _response) ],
     ],
     options => { trace => 0 },
 );
@@ -62,7 +99,87 @@ sub irc_001 {
 }
 
 sub irc_join {
-  my ($nickhost,$channel) = @_[ARG0,ARG1];
+  my ($heap,$nickhost,$channel) = @_[HEAP,ARG0,ARG1];
+  return;
+}
+
+sub irc_public {
+  my ($kernel,$heap,$who,$where,$what) = @_[KERNEL,HEAP,ARG0..ARG2];
+  my $nick = ( split /!/, $who )[0];
+  {
+    ( my $foo = $nick ) =~ s/_*$//;
+    return if $foo =~ /$ignore_re/;
+  }
+  {
+    my $decode = decode_irc( $what );
+    while ( $decode =~ /$answer_re/g ) {
+        my $what = $1 || $3 || $5;
+        my $numb = $2 || $4 || $6;
+
+        # skip "requests" for changes before 1000 that were not
+        # directly addressed to the bot (or /msg)
+        if ( $what =~ /change|commit|#/i &&
+             $numb =~ /^[0-9]+$/ && $numb <= 1000 ) {
+            next;
+        }
+
+        my $ua = $what =~ /change|commit|#/i ? 'perlbrowse' : 'rtbrowse';
+
+        {
+          my $id = allocate_id();
+          my $url = ( $ua eq 'perlbrowse' ? BASEURL2 : RTBROWSE ) . $numb;
+          my $req = GET $url;
+          $kernel->post(
+            'ua',
+            'request',
+            '_response',
+            $req,
+            $id,
+          );
+          $heap->{requests}->{ $id } = [ $numb, $ua, $where ];
+        }
+        #my $msg = $self->$ua( $numb );
+        #$msg and $self->reply( $args, $msg );
+
+        #$msg and $self->log( "$ua: $msg" );
+
+    }
+  }
+  return;
+}
+
+sub _response {
+  my ($heap,$request_packet,$response_packet) = @_[HEAP,ARG0,ARG1];
+  my ($numb,$type,$where);
+  {
+    my $id = $request_packet->[1];
+    my $data = delete $heap->{requests}->{ $id };
+    free_id( $id );
+    ($numb,$type,$where) = @{ $data };
+  }
+  my $resp = $response_packet->[0];
+  return unless $resp->is_success;
+  my $msg;
+  if ( $type eq 'perlbrowse' ) {
+    my ($porter) = $resp->content =~ m|author</td><td>(.+) &lt;|;
+    my ($subj)   =
+        $resp->content =~ m|<a class="title" href="/perl.git/commit.+?">(.+?)</a>|;
+
+    my ($branch) = $resp->content =~ m|href="/perl.git/shortlog/refs/heads/(.+?)"|;
+    $msg = $porter
+        ? "Commit \#$numb($branch/$porter): $subj " . BASEURL2 . $numb
+        : "Commit \#$numb not found on perlbrowse";
+  }
+  else {
+    return if $resp->content !~ m{Queue:</td>\n.+perl5};
+    require HTML::HeadParser;
+    my $p = HTML::HeadParser->new;
+    $p->parse($resp->content);
+    $msg = $p->header('Title') || '';
+    $msg =~ s/^#/rt #/;
+    $msg .= ' ' . RTBROWSE . $numb;
+  }
+  $irc->yield( 'primvsg', $where->[0], $msg ) if $msg;
   return;
 }
 
