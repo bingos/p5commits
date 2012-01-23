@@ -19,12 +19,12 @@ use constant BASEURL    => 'http://www.nntp.perl.org/group/perl.perl5.changes';
 use constant BASEURL2   => 'http://perl5.git.perl.org/perl.git/commit/';
 use constant RTBROWSE   => 'http://rt.perl.org/rt3/Public/Bug/Display.html?id=';
 
-use constant NICKNAME   => 'p5commits';
+use constant NICKNAME   => 'p5commits2';
 use constant IRCSERVER  => 'irc.perl.org';
 use constant IRCPORT    => '6667';
 use constant IRCUSER    => 'p5p';
 use constant IRCNAME    => 'p5commits bot <see BinGOs>';
-use constant CHANNEL    => '#p5p';
+use constant CHANNEL    => '#IRC.pm';
 
 my $current_id = 0;
 my %active_ids;
@@ -163,11 +163,9 @@ sub _response {
   if ( $type eq 'perlbrowse' ) {
     my ($porter) = $resp->content =~ m|author</td><td>(.+) &lt;|;
     my ($subj)   =
-        $resp->content =~ m|<a class="title" href="/perl.git/commit.+?">(.+?)</a>|;
-
-    my ($branch) = $resp->content =~ m|href="/perl.git/shortlog/refs/heads/(.+?)"|;
+        $resp->content =~ m|<a class="title" href="/perl\.git/commit.+?">(.+?)</a>|;
     $msg = $porter
-        ? "Commit \#$numb($branch/$porter): $subj " . BASEURL2 . $numb
+        ? "Commit \#$numb($porter): $subj " . BASEURL2 . $numb
         : "Commit \#$numb not found on perlbrowse";
   }
   else {
@@ -179,7 +177,7 @@ sub _response {
     $msg =~ s/^#/rt #/;
     $msg .= ' ' . RTBROWSE . $numb;
   }
-  $irc->yield( 'primvsg', $where->[0], $msg ) if $msg;
+  $irc->yield( 'privmsg', $where->[0], $msg ) if $msg;
   return;
 }
 
