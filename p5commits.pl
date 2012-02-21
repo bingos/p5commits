@@ -108,6 +108,7 @@ sub irc_public {
   my $nick = ( split /!/, $who )[0];
   {
     ( my $foo = $nick ) =~ s/_*$//;
+    $foo = uc_irc( $foo );
     return if $foo =~ /$ignore_re/;
   }
   {
@@ -206,6 +207,7 @@ sub _article {
 
   my $msg = "$pname pushed to $branch ($git_describe):";
   if ( $action eq 'deleted' ) {
+    say $action;
     $msg .= " $action";
     say $msg;
     $irc->yield( 'ctcp', CHANNEL, "ACTION $msg" );
