@@ -70,7 +70,7 @@ POE::Component::Client::NNTP::Tail->spawn(
 
 POE::Session->create(
     package_states => [
-	    'main' => [ qw(_start irc_001 irc_join irc_public _default _header _article _response) ],
+	    'main' => [ qw(_start irc_001 irc_join irc_public _header _article _response) ],
     ],
     options => { trace => 0 },
 );
