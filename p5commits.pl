@@ -200,6 +200,7 @@ sub _article {
   my $body = $post->body;
   my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been ([^ ]+)|;
   $branch ||= 'nobranch';
+  say $action;
 
   (my $porter = $post->header( 'From' )) =~ s/\015?\012//g;
   $porter ||= '("unknown")';
