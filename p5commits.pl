@@ -207,8 +207,7 @@ sub _article {
   my ($pname) = $porter =~ /\("(.+)"\)/;
 
   my $msg = "$pname pushed to $branch ($git_describe):";
-  if ( $action eq 'deleted' ) {
-    say $action;
+  if ( $action =~ m!(deleted|created)! ) {
     $msg .= " $action";
     say $msg;
     $irc->yield( 'ctcp', CHANNEL, "ACTION $msg" );
