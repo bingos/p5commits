@@ -198,7 +198,7 @@ sub _article {
   my ($git_describe) = $subject =~ m!(v5.+)$!;
 
   my $body = $post->body;
-  my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been ([^ ]+)|;
+  my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been ([^ ]+)\s|;
   $branch ||= 'nobranch';
   say $action;
 

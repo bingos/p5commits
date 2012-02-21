@@ -50,7 +50,7 @@ sub nntp_211 {
   # nntp_211:  '32507 1 32507 perl.perl5.changes'
   my ($kernel,$heap,$text) = @_[KERNEL,HEAP,ARG0];
   $heap->{lastid} = ( split ' ', $text )[0];
-  $heap->{firstid} = $heap->{lastid} - 10;
+  $heap->{firstid} = $heap->{lastid} - 20;
   $kernel->post( 'NNTP-Client' => article => $heap->{firstid} );
   return;
 }
@@ -63,7 +63,10 @@ sub nntp_220 {
   my ($git_describe) = $subject =~ m!(v5.+)$!;
 
   my $body = $post->body;
-  my ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been (.+?)\s|;
+  my ($branch,$action);
+  ($branch,$action) = $subject =~ m!(annotated tag .+?), (.+?)\.!;
+  ($branch,$action) = $body =~ m|In perl.git, the branch ([^ ]+) has been (.+?)\s|
+    unless $branch && $action;
   $branch ||= 'nobranch';
 
   (my $porter = $post->header( 'From' )) =~ s/\015?\012//g;
@@ -71,7 +74,7 @@ sub nntp_220 {
   my ($pname) = $porter =~ /\("(.+)"\)/;
 
   my $msg = "$pname pushed to $branch ($git_describe):";
-  unless ( $action eq 'deleted' ) {
+  unless ( $action =~ m!(deleted|created)! ) {
     my $log = 0;
     my $state = {};
     my $ignore = 0;
@@ -111,7 +114,7 @@ sub nntp_220 {
     }
   }
   else {
-    $msg .= ' deleted';
+    $msg .= " $action";
   }
 
 =for comment
